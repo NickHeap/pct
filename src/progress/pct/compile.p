@@ -393,6 +393,7 @@ PROCEDURE compileXref.
     END.
     IF COMPILER:WARNING OR lWarnings THEN DO:
       OUTPUT STREAM sWarnings TO VALUE(warningsFile).
+      /*
       DO i = 1 TO COMPILER:NUM-MESSAGES:
         IF bAbove101 THEN DO:
           /* Messages 2363, 3619 and 3623 are in fact warnings (from -checkdbe switch) */
@@ -403,6 +404,7 @@ PROCEDURE compileXref.
           END.
         END.
       END.
+      */
       FOR EACH ttWarnings:
         PUT STREAM sWarnings UNFORMATTED SUBSTITUTE("[&1] [&3] &2", ttWarnings.rowNum, ttWarnings.msg, ttWarnings.fileName) SKIP.
       END.

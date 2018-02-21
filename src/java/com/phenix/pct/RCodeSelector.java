@@ -17,8 +17,13 @@
 package com.phenix.pct;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.text.MessageFormat;
+import java.util.HashMap;
 
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.types.selectors.BaseExtendSelector;
@@ -39,6 +44,10 @@ public class RCodeSelector extends BaseExtendSelector {
     
     private int mode = MODE_CRC;
 
+    private boolean noReportTargetOnly = false;
+    private File targetCacheFile = null;
+    private HashMap<String, String> hashMap;
+    
     public void setMode(String mode) {
         if ("crc".equalsIgnoreCase(mode))
             this.mode = MODE_CRC;
@@ -54,7 +63,53 @@ public class RCodeSelector extends BaseExtendSelector {
         this.lib = lib;
     }
 
-    @Override
+    public void setNoReportTargetOnly(boolean noReportTargetOnly) {
+        this.noReportTargetOnly = noReportTargetOnly;
+    }
+
+    public void setTargetCacheFile(String targetCache) {
+        if (targetCache != null) {
+            this.targetCacheFile = new File(targetCache);
+
+            hashMap = new HashMap<String, String>();
+
+            //read the cache file
+            if (this.targetCacheFile.exists()) {
+                log(MessageFormat.format("Making dirs for {0} [{1}]", targetCacheFile, targetCacheFile.getParent()), Project.MSG_VERBOSE);
+
+                log("Reading md5 cache...", Project.MSG_VERBOSE);
+
+                try (BufferedReader br = new BufferedReader(new FileReader(targetCacheFile))) {
+                    String line;
+                    //System.out.println("line=[" + line + "]");
+                    while ((line = br.readLine()) != null) {
+                        if (line == ""){
+                            break;
+                        }
+                        //split into filename, md5
+                        String[] elements = line.split("\\?", -1);
+                        //add to hashmap
+                        hashMap.put(elements[0], elements[1]);
+                    }
+                } catch (IOException e) {
+                    setError("Error processing cache file");
+                }
+                log(MessageFormat.format("Read {0} md5 cache values.", hashMap.size()), Project.MSG_VERBOSE);
+            }
+            else
+            {
+                try {
+                    log(MessageFormat.format("Making dirs for {0} [{1}]", targetCacheFile, targetCacheFile.getParent()), Project.MSG_VERBOSE);
+                    targetCacheFile.getParentFile().mkdirs();
+                    log(MessageFormat.format("Creating file for {0}", targetCacheFile), Project.MSG_VERBOSE);
+                    targetCacheFile.createNewFile();
+                } catch (Exception e) {
+                    setError(MessageFormat.format("Error creating cache file {0} -- {1}", targetCacheFile.getName(), e.getMessage()));
+                }
+            }
+        }
+    }
+
     public void verifySettings() {
         super.verifySettings();
 
@@ -85,7 +140,7 @@ public class RCodeSelector extends BaseExtendSelector {
 
         RCodeInfo file1, file2;
         try {
-            file1 = new RCodeInfo(file);
+            file1 = new RCodeInfo(file, false);
         } catch (Exception e) {
             log(MessageFormat.format("Source {0} is an invalid rcode -- {1}", filename, e.getMessage()));
             return true;
@@ -93,9 +148,28 @@ public class RCodeSelector extends BaseExtendSelector {
         
         if (reader == null) {
             try {
-                file2 = new RCodeInfo(new File(dir, filename));
+                //do we have the md5 cached?
+                if ((targetCacheFile != null)
+                        && (hashMap.containsKey(filename))) {
+                    file2 = new RCodeInfo(file, hashMap.get(filename));
+                    log(MessageFormat.format("Retreived md5 from cache for {0}", filename), Project.MSG_VERBOSE);                    
+                }
+                else
+                {
+                    file2 = new RCodeInfo(new File(dir, filename), false);
+                    //write to the cachefile?
+                    if (targetCacheFile != null) {
+                        //append the md5 to targetcachefile
+                        log(MessageFormat.format("Appending md5 to cachefile for {0}", filename), Project.MSG_VERBOSE);
+                        FileWriter writer = new FileWriter(targetCacheFile, true);
+                        writer.append(filename + "?" + file2.getMD5() + "\n");
+                        writer.close();
+                    }
+                }
             } catch (Exception e) {
-                log(MessageFormat.format("Target {0} is an invalid rcode -- {1}", filename, e.getMessage()));
+                if (!noReportTargetOnly) {
+                  log(MessageFormat.format("Target {0} is an invalid rcode -- {1}", filename, e.getMessage()));
+                }
                 return true;
             }
         } else {
@@ -105,7 +179,7 @@ public class RCodeSelector extends BaseExtendSelector {
                 return true;
             }
             try {
-                file2 = new RCodeInfo(new BufferedInputStream(reader.getInputStream(e)));
+                file2 = new RCodeInfo(new BufferedInputStream(reader.getInputStream(e)), false);
             } catch (Exception e2) {
                 log(MessageFormat.format("PLTarget {0} is an invalid rcode -- {1}", filename, e2.getMessage()));
                 return true;
@@ -117,8 +191,14 @@ public class RCodeSelector extends BaseExtendSelector {
                 log(MessageFormat.format("CRC {2} File1 {0} File2 {1}", file1.getCRC(), file2.getCRC(), filename), Project.MSG_VERBOSE);
                 return (file1.getCRC() != file2.getCRC());
             case MODE_MD5:
-                log(MessageFormat.format("MD5 {2} File1 {0} File2 {1}", file1.getMD5(), file2.getMD5(), filename), Project.MSG_VERBOSE);
-                return !file1.getMD5().equals(file2.getMD5());
+                if (file1.getMD5().equals(file2.getMD5())) {
+                    log(MessageFormat.format("MATCH MD5 {0} {1}", filename, file1.getMD5()), Project.MSG_VERBOSE);
+                    return false;
+                }
+                else {
+                    log(MessageFormat.format("DIFFER MD5 {2} File1 {0} File2 {1}", file1.getMD5(), file2.getMD5(), filename), Project.MSG_VERBOSE);
+                    return true;
+                }
             default: return true;
         }
     }

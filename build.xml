@@ -177,7 +177,7 @@
   <target name="cond.pbuild" if="${build.this.version}">
     <exec executable="${dlcHome}/bin/_dbutil">
       <arg value="procopy" />
-      <arg value="${dlcHome}/empty.db" />
+      <arg value="${dlcHome}/empty8.db" />
       <arg value="empty" />
       <env key="DLC" value="${dlcHome}" />
     </exec>

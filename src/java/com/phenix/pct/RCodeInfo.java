@@ -51,9 +51,25 @@ public class RCodeInfo {
     private String debugListingFile;
 
     public RCodeInfo(File file) throws InvalidRCodeException, IOException {
-        this(new BufferedInputStream(new FileInputStream(file), 65536));
+        this(new BufferedInputStream(new FileInputStream(file), 65536), true);
     }
 
+    public RCodeInfo(File file, boolean readDebug) throws InvalidRCodeException, IOException {
+        this(new BufferedInputStream(new FileInputStream(file), 65536), readDebug);
+    }
+
+    public RCodeInfo(File file, String md5) throws InvalidRCodeException, IOException {
+        this.input = new BufferedInputStream(new FileInputStream(file), 65536);
+        this.md5 = md5;
+    }
+
+    // public RCodeInfo(File file, String md5, boolean readDebug) throws InvalidRCodeException, IOException {
+    //     this(new BufferedInputStream(new FileInputStream(file), 65536), readDebug);
+    // }
+
+    public RCodeInfo(InputStream input) throws InvalidRCodeException, IOException {
+        this(input, true);
+    }
     /**
      * Input stream has to support mark()/reset(). Buffer should be large enough, otherwise this
      * method may throw an IOException. Large enough depends on number of methods and signatures.
@@ -63,11 +79,13 @@ public class RCodeInfo {
      * @throws InvalidRCodeException
      * @throws IOException
      */
-    public RCodeInfo(InputStream input) throws InvalidRCodeException, IOException {
+    public RCodeInfo(InputStream input, boolean readDebug) throws InvalidRCodeException, IOException {
         this.input = input;
         this.input.mark(0);
         processFile();
-        readDebugListing();
+        if (readDebug) {
+            readDebugListing();
+        }
         input.close();
     }
 
